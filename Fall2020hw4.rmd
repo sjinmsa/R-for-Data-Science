@@ -1,0 +1,143 @@
+### Question 7.1   
+Describe a situation or problem from your job, everyday life, current events, etc., for which exponential smoothing would be appropriate. What data would you need? Would you expect the value of  (the first smoothing parameter) to be closer to 0 or 1, and why?  
+- Answer:  
+The product team in the company would like to know what the traffic of a next week like so they could monitor the change after launch the new design, without worry too much about other factor that might potentially fluctuate the traffic. We could use exponential smoothing. The ideal data we need will including the past weekly traffic volume throughout past three months. Visitors may visit the website due to needs or information or just referral by another affiliate website. Exponential smoothing assigns exponentially decreasing weights as the observation gets older, so trailing three months traffic data should be enough to cover the analysis. Since website traffic volume has a certain amount of randomness, I would suggest setting our Alpha closer to 0 which we will more likely to trust the previous estimate.
+
+
+### Question 7.2   
+Using the 20 years of daily high temperature data for Atlanta (July through October) from Question 6.2 (file temps.txt), build and use an exponential smoothing model to help make a judgment of whether the unofficial end of summer has gotten later over the 20 years.  (Part of the point of this assignment is for you to think about how you might use exponential smoothing to answer this question. Feel free to combine it with other models if you’d like to. There’s certainly more than one reasonable approach.)   
+
+My approach of the this analysis:  
+As we know from last week assignment, the temperature in Atlanta through out the summer is more of a trend and seasonality. In this case, we could used the Holt-Winters Seasonal Method.Also since we are trying to get an answer of whether the unofficial summer ends has gotten later.  
+Steps:  
+1. We start by tranform the data into vector  
+2. then change the vector to time series object  
+3. fit data using HoltWinters  
+4. try different parameters and view result in single, double and triple as well as seasonal in 'multiplicative'
+
+```{r}
+# Let's clear environment and get the packages we are going to use
+rm(list = ls())
+library('forecast')
+library('smooth')
+set.seed(1)
+
+```
+
+ 
+```{r}
+# Read data 
+temp <- read.table('temps.txt', stringsAsFactors = F,header = T)
+head(temp)
+```
+
+```{r}
+# convert data to vector
+temp_list <- as.vector(t(temp[,2:21]))
+
+# turn vector to time series object
+ts <- ts(temp_list, start = 1996, frequency=123)
+
+```
+
+```{r}
+plot(ts, col='dark gray')
+
+```
+
+
+```{r}
+#first try single exponential smoothing
+temp_single <- HoltWinters(ts,beta=FALSE,gamma=FALSE)
+temp_single
+```
+
+```{r}
+# this is the double exponential smoothing
+temp_double <- HoltWinters(ts,gamma = FALSE)
+temp_double
+```
+```{r}
+# also try the triple and use multiplicative on seasonal
+temp_triple <- HoltWinters(ts, alpha = NULL, beta= NULL, gamma=NULL, seasonal = 'multiplicative')
+temp_triple
+
+```
+
+```{r}
+#We can try to use forecast and take a look at the data.
+
+temp_ts <- HoltWinters(ts)
+plot(forecast(temp_ts), col='dark gray')
+```
+```{r}
+#plot the Holt Winter 
+plot(temp_triple, col= 'dark gray')
+
+```
+```{r}
+#take a look at the exponential smoothing result - triple 
+head(temp_triple$fitted)
+```
+
+```{r}
+summary(temp_triple)
+
+```
+#### From above Holt-Winters approach, we could see that there is no significant trend due the both Alpha, Beta are closed to 0.
+
+```{r}
+#Extract season factors prepare for CUSUM
+sf<- matrix(temp_triple$fitted[,4],ncol=123)
+dim(sf)
+
+rownames(sf)<-c(1997:2015)
+colnames(sf)<-as.vector(t(temp[,1]))
+sf<-t(sf)
+
+```
+#### Note:   
+from here we are going to use CUSUM algorithm on the season factor dataset. So let's take a look at if we can detect changes on the smoothed data, which is the season factor from the previous analysis.   
+Steps:  
+1.Create empty dataframe as place holder for CUSUM result  
+2.Calculated mean, std, C and T value.
+3.Run CUSUM then output the value and see if change detected. 
+
+```{r}
+ #creating empty data frame
+cusum_df <- data.frame(matrix(nrow=nrow(sf), ncol = ncol(sf)))
+colnames(cusum_df)<-colnames(sf)
+rownames(cusum_df)<-rownames(sf)
+#cusum_df <- rownames_to_column(cusum_df,var="Day")
+library(tibble)
+head(rownames_to_column(cusum_df,var="Day"))
+```
+```{r}
+head(sf)
+```
+
+```{r}
+change<-vector()
+for(y in 2:ncol(cusum_df)){
+    cusum_df[1,y]<-0 
+    mu<-mean(sf[1:31,y-1]) 
+    std<-sd(sf[1:31,y-1]) 
+    c <- 0.5*std
+    t<-4*std 
+    
+for(i in 2:nrow(cusum_df)){
+   cusum_df[i,y]<-max(0,cusum_df[i-1,y]+(mu-sf[i,y]-c))
+   if (cusum_df[i,y]>=t){
+   #change<-append(change,cusum_df[i,y])}}
+    change[i] <- cusum_df[i,y]}}
+   if (length(change)==0){
+    cat(colnames(cusum_df[y]), 'No' ,cusum_df[i,y],"\n")
+    }
+    else{
+       cat(colnames(cusum_df[y]),'Yes',cusum_df[i,y],"\n")}
+    
+}
+```
+#### Summary:  
+Based on what we see above, we first used the season factor implement CUSUM, here we are using same July mean as our mean, and 0.5std as the C value, 4*std as the T value, and starting 2011 we are see there is a detection of change. If we adjust the T value or C value, of course we will have a different result for CUSUM. 
+And we look back further, using single, double, and triple exponential smoothing, we all have very similar result that the Alpha is actually closed to 0.  Same for the Beta, in other words, not significant trend in this data.

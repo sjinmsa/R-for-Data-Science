@@ -1,0 +1,188 @@
+---
+title: "Fall2020hw5"
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Question 8.1
+Describe a situation or problem from your job, everyday life, current events, etc., for which a linear regression model would be appropriate. List some (up to 5) predictors that you might use.
+
+Answer:   
+It is more common that most of the tech companies are allowing their employee work from home(WFH) forever, most of the people I know are leaving the silicon valley and find a new place to live where is cheaper or less traffic. To predict the housing rental price in San Francisco, we can consider linear regression model and using the following 5 predictors:
+[1] The population that moving out of the town
+[2] The population that is moving in the town
+[3] The economy increasing/decreasing(given current situation)
+[4] The housing price 
+[5] The wage level  
+(For example, if overall the population is decreasing, the demand of rent a place will also dropped.)
+## Question 8.2   
+Using crime data from http://www.statsci.org/data/general/uscrime.txt  (file uscrime.txt, description at http://www.statsci.org/data/general/uscrime.html ), use regression (a useful R function is lm or glm) to predict the observed crime rate in a city with the following data:
+M = 14.0
+So = 0
+Ed = 10.0
+Po1 = 12.0
+Po2 = 15.5
+LF = 0.640
+M.F = 94.0
+Pop = 150
+NW = 1.1
+U1 = 0.120
+U2 = 3.6
+Wealth = 3200
+Ineq = 20.1
+Prob = 0.04
+Time = 39.0
+Show your model (factors used and their coefficients), the software output, and the quality of fit. 
+Note that because there are only 47 data points and 15 predictors, you’ll probably notice some overfitting.  We’ll see ways of dealing with this sort of problem later in the course.
+
+```{r}
+#remove object from current workspace
+rm(list=ls())
+set.seed(1)
+
+```
+
+
+```{r }
+#import data
+crimedata = read.table('uscrime.txt', stringsAsFactors = F, header = T)
+summary(crimedata)
+```
+We will use column 1-15 as predictors and column 16 as response  
+First use full dataset to build the model
+For the Crime column, the minimum is 342, and maximum is 1993, mean is 905, and median is 831. 
+
+```{r}
+#now use the observed data provided
+observed <- data.frame(M = 14.0,
+So = 0,
+Ed = 10.0,
+Po1 = 12.0,
+Po2 = 15.5,
+LF = 0.640,
+M.F = 94.0,
+Pop = 150,
+NW = 1.1,
+U1 = 0.120,
+U2 = 3.6,
+Wealth = 3200,
+Ineq = 20.1,
+Prob = 0.04,
+Time = 39.0
+)
+
+```
+
+
+#### 1.we directly used the data and create model
+```{r data, echo=TRUE}
+#fit data to model
+model <- lm(Crime~.,data = crimedata)
+#summary of model
+summary(model)
+
+```
+
+```{r}
+pre <- predict(model, observed)
+pre
+
+```
+#### It seems only half of the minimum crime number of the given dataset, the R-squared is 0.7. let's try to scaling the data first and see if there is improvment.  
+
+```{r}
+#scaled the data 
+crime_scaled = scale(crimedata[,1:15])
+df <- data.frame(crime_scaled, Crime = crimedata$Crime)
+head(df)
+#build model using scaled data
+model_scaled = lm(Crime~.,data = df)
+summary(model_scaled)
+```
+#### Scaled data in this case make no difference to the result, but good practice to understand scaling data could avoid higher value dominating when calcuate distances.
+
+```{r}
+observed_pre <- predict(model_scaled, observed)
+observed_pre
+```
+  
+#### The number seems unreal even the R-squared is 0.7.Since we are using too many unrelated vectors, I'm going to drop the non-related factor based on the p-value and build the model again. 
+```{r}
+summary(model)$coef
+```
+ 
+```{r}
+# get all the row has p-vlaue less than 0.05
+data.frame(summary(model)$coef[summary(model)$coef[,4] <= 0.05, 4])
+```
+
+```{r}
+# pick 'M', 'Ed', 'Ineq', 'Prob' column
+model_reduction <- lm(Crime~ M + Ed +  Ineq + Prob, data = crimedata )
+summary(model_reduction)
+```
+```{r}
+plot(model_reduction)
+```
+
+
+```{r}
+#predict using given list data
+pred_reduced <- predict(model_reduction, observed)
+pred_reduced
+```
+#### 897 make a lot sense than previous two output since it is closed to the mean (recall that the dataset mean is 905) But now R-squared is 0.19
+
+
+
+####  Also buidling model using glm()
+
+```{r}
+#start with using same data 
+model_glm <- glm(Crime~ .,family = gaussian,
+              data = crimedata
+              )
+summary(model_glm)
+```
+```{r}
+data.frame(summary(model_glm)$coef[summary(model_glm)$coef[,4] <= 0.1, 4])
+
+```
+
+```{r}
+#use glm on selected factor
+model_glm2 <- glm(Crime~ M+Ed+Ineq+Po1+U2+Prob,family = gaussian,
+              data = crimedata
+              )
+summary(model_glm2)
+```
+```{r}
+plot(model_glm2)
+```
+
+
+```{r}
+#apply to observation
+pred_glm <- predict(model_glm2,observed )
+pred_glm
+
+```
+#### Slightly higher than previous result but definately a reasonable number.  
+
+#### NOTE:  
+Above are all high-level estimate,  A common metric used to check quality of fit for multiple linear regression is adjusted R squared.However, we see that all reasonable output is lower R-squared and those extreme numbers has higher R-squared. So let's evaluate the model in different way
+### Model accuracy assessment  
+```{r}
+#use 4 fold cross-validation measures of predictive accuracy of linear regression.
+library(DAAG)
+model_crossv <- cv.lm(crimedata,model_reduction, m = 4, seed =1)
+head(model_crossv)
+
+```
+
+```{r}
+#calculate the root of variance of the residuals, it showing how close the observed data points are to the model's predicted values.
+library(Metrics)
+rmse(crimedata$Crime, model_crossv$Predicted)
+```
+#### This still seem high for at this point. Even the predicted output looks reasonable, the accuracy indication is not ideally showing the model is the best fit.  Since we have only 47 data points availbe, and we have 15 factors, it will cause our model overfit. If we can increase the volume of data or reduce the unnecessary factors, we could have improve the overfitting. 

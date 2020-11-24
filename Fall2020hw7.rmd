@@ -1,0 +1,288 @@
+---
+title: "Fall2020hw7"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 10.1  
+
+Using the same crime data set uscrime.txt as in Questions 8.2 and 9.1, find the best model you can using 
+(a) a regression tree model, and 
+(b) a random forest model.  
+In R, you can use the tree package or the rpart package, and the randomForest package.  For each model, describe one or two qualitative takeaways you get from analyzing the results (i.e., don’t just stop when you have a good model, but interpret it too).  
+
+
+```{r cars}
+#remove object from current workspace
+rm(list=ls())
+set.seed(1)
+```
+
+```{r}
+#import data
+crimedata <- read.table("uscrime.txt", stringsAsFactors = FALSE, header = TRUE)
+head(crimedata)
+```
+
+```{r}
+#install tree pacakge
+###install.packages('tree')
+#call tree library
+library('tree')
+#setseed
+set.seed(1)
+
+#fit model use whole data since this way help to see how tree works
+
+crime_tree = tree(Crime ~ ., data = crimedata)
+summary(crime_tree)
+```
+
+#### 
+According to the summary, we have 7 leaf nodes in the tree  
+Residual mean deviance: a measure of the error remaining in the tree after construction. Here we have 47390
+##### I will be using the number of nodes and residual deviance to compare models.
+
+```{r}
+#tree in text form
+crime_tree
+```
+
+
+```{r}
+plot(crime_tree)
+text(crime_tree, pretty = 0)
+title(main = 'Regression Tree Plot')
+```
+```{r}
+#use cross validation on tree models
+crossvalidate <- cv.tree(crime_tree)
+plot(crossvalidate)
+
+```
+
+#### The resulting plot is showing the change of deviance as different number of terminal nodes were used. Here the number of nodes increase and the deviance decreases.
+
+```{r}
+plot(crossvalidate$size, crossvalidate$dev, type = "b")
+```
+#### since the deviance is helpful to determined if the fit is good, we can see that 7 nod give us best fit, and since tree modle are the most susceptible ouf of all machine learning algrithms to overfitting, let's try to use the pruning method and see if we could reduce the likelihood. The prune let us control of the number of nodes.
+```{r}
+#remove 1 nod and see the 
+prune_tree <- prune.tree(crime_tree, best = 6)
+summary(prune_tree)
+
+```
+##### here shows when the number of terminal decreases, the residual mean deviances increases.In this case, we can stick with setting the node to 7.
+
+
+```{r}
+#calculate R^2 for model fits
+ct_pred <- predict(crime_tree)
+RSS <- sum((ct_pred - crimedata$Crime)^2)
+TSS <- sum((crimedata$Crime - mean(crimedata$Crime))^2)
+R2 <- 1 - RSS/TSS
+R2
+```
+#### as we following along with all different type of model, the 0.72 is showing an overfitting which we are expecting since the dataset is so small  
+
+#### Random Forest model
+
+```{r}
+#install package
+#install.packages('randomForest')
+library(randomForest)
+set.seed(1)
+randomforest <- randomForest(Crime ~., data=crimedata, importance = TRUE, nodesize = 7)
+summary(randomforest)
+```
+```{r}
+#similar when we calculate for regression tree...
+rd.pred <- predict(randomforest)
+SSR <- sum((rd.pred - crimedata$Crime)^2)
+SST <- sum((crimedata$Crime - mean(crimedata$Crime))^2)
+rd.R2 <- 1- SSR/SST
+rd.R2
+
+```
+```{r}
+set.seed(123)
+n_list  <- list()
+for (i in 1:7){
+randomforest2 <- randomForest(Crime ~., data=crimedata, importance = TRUE, nodesize = i)
+rd.pred2 <- predict(randomforest2)
+SSR2 <- sum((rd.pred2 - crimedata$Crime)^2)
+SST2 <- sum((crimedata$Crime - mean(crimedata$Crime))^2)
+rd.R_2 <- 1- SSR2/SST2
+n_list <- c(n_list,rd.R_2)}
+n_list
+```
+#### choose the nodsize as 5 will result higher R^2.   
+### Summary:   
+We first using all the factors build the regression tree model, then use cross validation to validate the fits. Then we also try to prune the tree model by reducing the nodes, intresting found that the deviance decrease when the number of nodes increases.After it we calculate the R^2 which indicating overfit.
+Compare with regression tree model, we then use the random forest, the random forest model seems slightly better in terms of reducing the overfit, and by looping over the number of nodes we find the best number of node to obtain a better R^2. If we look closer, we also could found that the factor Po1 is showing up in the model summary many times, which indicating this is one of the key factor for buidling the model.
+
+## Question 10.2    
+Describe a situation or problem from your job, everyday life, current events, etc., for which a logistic regression model would be appropriate. List some (up to 5) predictors that you might use.  
+
+Logistic regression is widely used in all different business and daily life experiences. For example we could use logistic regression on analyze customer behavior. Let's say we sending out the daily promotion email to our targeting customers. All the following behavior could be apply: Are the email delivered or not, are the email bounced or not, are the customer open the email or not, are the customer click the email or not, are the customer unsubscribed our email or not, etc.  
+
+These are factors we could use during these funnel:  
+- email frequency  
+- email subject line  
+- email content  
+- email sent time  
+- email delivery system partner  
+
+## Question 10.3.1  
+Using the GermanCredit data set germancredit.txt from http://archive.ics.uci.edu/ml/machine-learning-databases/statlog/german / (description at http://archive.ics.uci.edu/ml/datasets/Statlog+%28German+Credit+Data%29 ), use logistic regression to find a good predictive model for whether credit applicants are good credit risks or not.  Show your model (factors used and their coefficients), the software output, and the quality of fit.  You can use the glm function in R. To get a logistic regression (logit) model on data where the response is either zero or one, use family=binomial(link=”logit”) in your glm function call
+```{r}
+#remove object from current workspace
+rm(list=ls())
+set.seed(1)
+
+```
+
+```{r}
+#import data from file
+creditdata <- read.table('germancredit.txt',stringsAsFactors = FALSE )
+summary(creditdata)
+```
+```{r}
+head(creditdata)
+```
+#### According to the description of the dataset at http://archive.ics.uci.edu/ml/datasets/Statlog+%28German+Credit+Data%29 we know that the first 20 columns are Attributes and the last column need to be transform to either 0 or 1.
+```{r}
+#data transform for the last column
+creditdata$V21[creditdata$V21==1] <- 0
+creditdata$V21[creditdata$V21==2] <- 1
+```
+
+```{r}
+#Before start building model, let's split data into two parts
+library(caTools)
+set.seed(123)
+split <- sample.split(creditdata, SplitRatio = 0.75)
+```
+
+```{R}
+#define our training and test set 
+training_set <- subset(creditdata, split ==TRUE)
+test_set  <- subset(creditdata, split==FALSE) 
+```
+
+
+```{r}
+#building logistic regression model
+lgr <- glm(V21 ~., family=binomial(link='logit'), data = training_set)
+summary(lgr)
+```
+#### Above showing V1, V2, V3, V4, V5, V6, V8, V10, V14, V19, V20 are significant.
+```{r}
+lgr2 <-  glm(V21 ~ V1+V2+V3+V4+V5+V6+V8+V10+V14+V19+V20,family=binomial(link = "logit"),data = training_set)
+summary(lgr2)
+
+```
+```{r}
+data.frame(summary(lgr2)$coef[summary(lgr2)$coef[,4] <= 0.1, 4])
+
+```
+
+```{r}
+training_set$V1A13[training_set$V1 == "A13"] <- 1
+training_set$V1A13[training_set$V1 != "A13"] <- 0
+training_set$V1A14[training_set$V1 == "A14"] <- 1
+training_set$V1A14[training_set$V1 != "A14"] <- 0
+training_set$V3A33[training_set$V3 == "A33"] <- 1
+training_set$V3A33[training_set$V3 != "A33"] <- 0
+training_set$V3A34[training_set$V3 == "A34"] <- 1
+training_set$V3A34[training_set$V3 != "A34"] <- 0
+training_set$V4A41[training_set$V4 == "A41"] <- 1
+training_set$V4A41[training_set$V4 != "A41"] <- 0
+training_set$V4A43[training_set$V4 == "A43"] <- 1
+training_set$V4A43[training_set$V4 != "A43"] <- 0
+training_set$V6A63[training_set$V4 == "A63"] <- 1
+training_set$V6A63[training_set$V4 != "A63"] <- 0
+
+```
+
+
+```{r}
+#building model and filter out non-significate
+lgr3 <-  glm(V21 ~ V1A13+V1A14+V2+V3A33+V3A34+V4A41+V4A43+V5+V6A63,family=binomial(link = "logit"),data = training_set)
+summary(lgr3)
+
+```
+
+```{r}
+#Same transform the test set
+test_set$V1A13[test_set$V1 == "A13"] <- 1
+test_set$V1A13[test_set$V1 != "A13"] <- 0
+test_set$V1A14[test_set$V1 == "A14"] <- 1
+test_set$V1A14[test_set$V1 != "A14"] <- 0
+test_set$V3A33[test_set$V3 == "A33"] <- 1
+test_set$V3A33[test_set$V3 != "A33"] <- 0
+test_set$V3A34[test_set$V3 == "A34"] <- 1
+test_set$V3A34[test_set$V3 != "A34"] <- 0
+test_set$V4A41[test_set$V4 == "A41"] <- 1
+test_set$V4A41[test_set$V4 != "A41"] <- 0
+test_set$V4A43[test_set$V4 == "A43"] <- 1
+test_set$V4A43[test_set$V4 != "A43"] <- 0
+test_set$V6A63[test_set$V4 == "A63"] <- 1
+test_set$V6A63[test_set$V4 != "A63"] <- 0
+
+```
+
+
+```{r}
+#predict with the test set
+g_pred<-predict(lgr3,test_set,type = "response")
+g_pred
+```
+```{r}
+library(Metrics)
+
+pred <- round((g_pred))
+acul <- test_set$V21
+accuracy <- accuracy(acul, pred)
+
+accuracy
+```
+#### The accuracy looks good, now let's impletment threshold to get better idea of how our model perform in the question 10.3.2  
+
+## Question 10.3.2    
+Because the model gives a result between 0 and 1, it requires setting a threshold probability to separate between “good” and “bad” answers.  In this data set, they estimate that incorrectly identifying a bad customer as good, is 5 times worse than incorrectly classifying a good customer as bad.  Determine a good threshold probability based on your model.
+
+```{r}
+list <- c()
+for(i in 1:10){
+  pred2 <- as.integer(pred > (i/10) )
+  confusion <-as.matrix(table(pred2,test_set$V21))
+
+  if(nrow(confusion)>1) { c1 <- confusion[2,1] } else { c1 <- 0 }
+  if(ncol(confusion)>1) { c2 <- confusion[1,2] } else { c2 <- 0 }
+  list <- c(list, c2*5 + c1)
+}
+
+```
+
+```{r}
+which.min(list)
+```
+#### 1/10 is 0.1, this is indicating when choose the treshold is around 0.1, where we could mininumthe cost of incorrectly identify good customer.The treshold seems really low but due to the tradeoff we are trying to maximized profit and minimum risks.
+```{r}
+pred3 <- round((g_pred>0.1))
+acul <- test_set$V21
+accuracy <- accuracy(acul, pred3)
+
+accuracy
+
+```
+#### Summary:  
+here is our trade off in accuracy of the model and actual business loss/profit senario.
+
+
+

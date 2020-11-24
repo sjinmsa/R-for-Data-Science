@@ -1,0 +1,139 @@
+---
+title: "Fall2020hw6"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 9.1  
+
+Using the same crime data set uscrime.txt as in Question 8.2, apply Principal Component Analysis and then create a regression model using the first few principal components.  Specify your new model in terms of the original variables (not the principal components), and compare its quality to that of your solution to Question 8.2.  You can use the R function prcomp for PCA. (Note that to first scale the data, you can include scale. = TRUE to scale as part of the PCA function. Don’t forget that, to make a prediction for the new city, you’ll need to unscale the coefficients (i.e., do the scaling calculation in reverse)!)
+
+
+```{r}
+#remove object from current workspace
+rm(list=ls())
+set.seed(1)
+```
+
+```{r}
+#import data
+crimedata = read.table('uscrime.txt', stringsAsFactors = F, header = T)
+summary(crimedata)
+```
+
+```{r}
+#visualized each factor correlation 
+library("GGally")
+ggcorr(crimedata, palette = 'RdYlGn', name = 'rho',label = T, label_color = 'black')
+```
+
+
+```{r}
+#use ggpairs Dr.Sokol mentioned in the video choose factor based on above ggcorr result.
+
+ggpairs(crimedata, columns = c('M', 'Po1','U1','LF', 'Ineq'))
+```
+#### Here we find that Po1 has stronger correlation, which also proved by ggcorr above.
+
+```{r}
+#Applying PCA
+pca <- prcomp(crimedata[-16], scale = TRUE)
+summary(pca)
+
+```
+#### now that we are going to decide how many of pca should we use, we could use the idea that if the percentage of cumulative sum of Eigen values can over 80% or 90%, the transformed vectors will be enough to represent the old vectors. According to the components above, either Pc4 or Pc5 should be good enough. 
+
+```{r}
+# here we can also use the Scree plot, this is a line plot of the eigenvalue of principal components in analysis.
+screeplot(pca, type="lines",col="blue")
+```
+#### Here notice that the 'Elbow' of the graph seems to level off is 4. So that means let's choose the first 4 PCA. 
+
+
+#### Build our model by using the first 4 PCA
+
+```{r}
+#Prepare for pca object
+principal_components <- pca$x[,1:4]
+head(principal_components)
+```
+```{r}
+#create 'new dataset'by the principal components and crime respond column
+pccrime <- cbind(principal_components, Crime =(crimedata$Crime))
+pccrime <- as.data.frame(pccrime)
+head(pccrime)
+```
+```{r}
+# create model using newdata
+model_pc <- lm(Crime~.,data = pccrime )
+summary(model_pc)
+```
+#### From this result, we could see the p-value is low enough but the R-squared is only 0.24,if we want to be confident about the fit of our model, we need a higer R-squared
+```{r}
+#here are the coefficients we have
+summary(model_pc)$coef
+```
+
+
+```{r}
+# we want to convert these coefficients back
+pca_coff <- model_pc$coef[2:5]
+pca_coff
+
+```
+```{r}
+reverse <- t(t(pca$x %*% t(pca$rotation)) * pca$scale + pca$center)
+reverse[1,]
+```
+```{r}
+#data provide as new city from 8.2
+observed <- data.frame(M = 14.0,
+So = 0,
+Ed = 10.0,
+Po1 = 12.0,
+Po2 = 15.5,
+LF = 0.640,
+M.F = 94.0,
+Pop = 150,
+NW = 1.1,
+U1 = 0.120,
+U2 = 3.6,
+Wealth = 3200,
+Ineq = 20.1,
+Prob = 0.04,
+Time = 39.0
+)
+
+```
+
+```{r}
+pre <- data.frame(predict(pca, observed)) 
+pre
+```
+
+
+```{r}
+pred_pca <- predict(model_pc, pre)
+pred_pca
+
+```
+#### Using the new data, we have result of near 1113 predict cases for the crime. definately a reasonable number.  
+#### Recall previous assignment, I have a not so ideal result for the RMSE, which basically calculate the root of variance of the residuals, it showing how close the observed data points are to the model's predicted values. Now let's do another calculation for the RMSE:
+
+#### again, I'm going to use the 4 fold cross validation.
+```{r}
+#model accuracy assessment here we are use 4 fold cross validation
+library(DAAG)
+pc_crossv <- cv.lm(pccrime,model_pc, m = 4, seed =1)
+head(pc_crossv)
+
+```
+```{r}
+library(Metrics)
+rmse(pccrime$Crime, pc_crossv$Predicted)
+```
+#### We can see the RMSE is lower than my previouse RMSE.
+(I have a mix feeling about this  result, slightly happy for sure because the RMSE is lower than my previouse assignment result (it was 328) It is not low enought for me to have strong confidence when using this model for new data. )

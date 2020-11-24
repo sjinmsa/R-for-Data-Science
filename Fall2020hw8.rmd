@@ -1,0 +1,269 @@
+### Question 11.1  
+
+Using the crime data set uscrime.txt from Questions 8.2, 9.1, and 10.1, build a regression model using:
+1.	Stepwise regression
+2.	Lasso
+3.	Elastic net
+For Parts 2 and 3, remember to scale the data first – otherwise, the regression coefficients will be on different scales and the constraint won’t have the desired effect.
+
+
+```{r}
+# Clear environment
+rm(list = ls())
+# Setting the random number generator seed so that our results are reproducible
+set.seed(1)
+
+```
+
+```{r}
+# First, read in the data
+
+crimedata <- read.table("uscrime.txt", stringsAsFactors = FALSE, header = TRUE)
+
+
+head(crimedata)
+
+```
+```{r}
+#Scale data
+#not scaling the [So] column since it is binary data according to TA info session.
+scaledcrime <-  as.data.frame(scale(crimedata[,c(1,3,4,5,6,7,8,9,10,11,12,13,14,15)]))
+#merge data back
+datacrime <-  cbind(crimedata[,2], scaledcrime, crimedata[,16])
+colnames(datacrime)[1] <- 'So'
+colnames(datacrime)[16] <- 'Crime'
+
+head(datacrime)
+
+```
+
+#### In the predictive model, in order to find the subset of variables in the data set resulting in the best performing model, that is a model that lowers prediction error. 
+```{r}
+# Loading reqired R packages
+#install.packages('tidyverse')
+
+
+(tidyverse)
+library(caret)
+# Use MASS package
+library(MASS)
+#starting from simple linear model
+full.model <- lm( Crime ~ ., data = datacrime)
+#choose a model by AIC in a stepwise algorithm both forward and backward
+step.model <- stepAIC(full.model, direction = 'both', trace = FALSE)
+#model summary
+summary(step.model)
+
+
+```
+```{r}
+plot(step.model)
+```
+
+#### notice here we have Adjusted R-squared= 0.7444  
+
+```{r}
+#5 fold cross validation of the model
+set.seed(1)
+#
+train.control <- trainControl(method = "cv", number = 5)
+```
+
+
+```{r}
+set.seed(1)
+step_model <- train( Crime ~ ., data = datacrime,
+                    method = "lmStepAIC", 
+                    trControl = train.control,
+                    trace = FALSE
+                    )
+# Model accuracy
+#step_model$results
+# Final model coefficients
+#step_model$finalModel
+# Summary of the model
+#summary(step_model$finalModel)
+step_model
+```
+```{r}
+# R-squared = 1 - SSEresiduals/SSEtotal
+# total sum of squared differences between data and its mean
+
+SStot <- sum((datacrime$Crime - mean(datacrime$Crime))^2)
+```
+
+```{r}
+library(DAAG)
+set.seed(1)
+c <- cv.lm(datacrime,step.model,m=5) # note that here, "m" is used for the number of folds, rather than the usual "k"
+
+```
+
+
+```{r}
+
+SSres_c <- attr(c,"ms")*nrow(datacrime)
+```
+
+```{r}
+1 - SSres_c/SStot
+```
+#### Cross validation showing lower level of fit.  Here we try to reduce M.F since the P value is higher than 0.05. 
+
+```{r}
+# new model without M.F
+nm <- lm(formula = Crime ~ M + Ed + Po1 +  U1 + U2 + Ineq + Prob, 
+    data = datacrime)
+summary(nm)
+
+```
+```{r}
+set.seed(1)
+c <- cv.lm(datacrime,nm,m=5)
+
+```
+
+```{r}
+SStot <- sum((datacrime$Crime - mean(datacrime$Crime))^2)
+SSres <- attr(c,"ms")*nrow(datacrime)
+1 - SSres/SStot
+```
+#### Here we spot that after remove the M.F the fit is slightly better, indicating we could remove M.F for simplify the model.
+
+###  Lasso Regression 
+Notes on R:  
+•	For the elastic net model, what we called λ in the videos, glmnet calls “alpha”; you can get a range of results by varying alpha from 1 (lasso) to 0 (ridge regression) [and, of course, other values of alpha in between].  
+•	In a function call like glmnet(x,y,family=”mgaussian”,alpha=1) the predictors x need to be in R’s matrix format, rather than data frame format.  You can convert a data frame to a matrix using as.matrix – for example, x <- as.matrix(data[,1:n-1])  
+•	Rather than specifying a value of T, glmnet returns models for a variety of values of T.   
+```{r}
+#install.packages('glmnet')
+```
+
+```{r}
+library(glmnet)
+set.seed(1)
+# here we can directly use scaled data that prepared in the first step and generate matrix
+# according to documentation of glmnet, x is predi
+x <- as.matrix(datacrime[,1:15])
+y <- as.matrix(datacrime[,16])
+model_lasso <- cv.glmnet(x, 
+                         y,
+                         alpha = 1, 
+                         nfolds = 5,
+                         nlambda = 20,
+                         type.measure = 'mse',
+                         family = 'gaussian',
+                         standardized = TRUE
+                         )
+model_lasso
+
+```
+
+```{r}
+plot(model_lasso)
+```
+```{r}
+#output the lambda value
+model_lasso$lambda.min
+cbind(model_lasso$lambda, model_lasso$cvm, model_lasso$nzero)
+```
+```{r}
+#for the lambda we chose, for the minimum error, o5 variable has taken out
+coef(model_lasso, s= model_lasso$lambda.min)
+```
+
+
+#### Po2, Pop, Wealth, U1 and Time has been taken out from the model.
+```{r}
+#run the model with only the selected predictors.
+nm_lasso <- lm(formula = Crime ~ So + M + Ed + Po1 + LF +M.F + NW+ U2 + Ineq + Prob, 
+    data = datacrime)
+summary(nm_lasso)
+```
+```{r}
+#cross validation for R^2
+set.seed(1)
+c <- cv.lm(datacrime,nm_lasso,m=5)
+
+SStot <- sum((datacrime$Crime - mean(datacrime$Crime))^2)
+SSres <- attr(c,"ms")*nrow(datacrime)
+1 - SSres/SStot
+
+```
+#### new R^2 is 0.54, so we can see for the model nm_lasso, the variables in So, LF, M.F, NW has greater p value than 0.1, meaning we could remove these factors.
+
+```{r}
+lm_lassof2 <- lm(formula = Crime ~ M + Ed + Po1 + U2 + 
+    Ineq + Prob, data = datacrime)
+summary(lm_lassof2)
+
+```
+```{r}
+#k-fold validation again
+set.seed(1)
+c <- cv.lm(datacrime,lm_lassof2,m=5)
+
+SStot <- sum((datacrime$Crime - mean(datacrime$Crime))^2)
+SSres <- attr(c,"ms")*nrow(datacrime)
+1 - SSres/SStot
+```
+#### R^2 has improved to 0.634 after reducing the variables
+
+### Elastic Net Apparoach
+
+
+```{r}
+#find alpha
+set.seed(1)
+fold= trainControl(method = "cv", number = 5)
+en = train(
+  Crime ~ ., data = datacrime,
+  method = "glmnet",
+  trControl = fold
+)
+en
+
+```
+
+
+```{r}
+#build elastic model 
+set.seed(1)
+elastic_net <- cv.glmnet(x,
+                      y,
+                      alpha=1,
+                      nlambda = 5.26,
+                      type.measure = 'mse',
+                      family = 'gaussian',
+                      
+                         )
+elastic_net
+```
+```{r}
+plot(elastic_net)
+```
+```{r}
+elastic_net$lambda.min
+cbind(elastic_net$lambda, elastic_net$cvm, elastic_net$nzero)
+```
+```{r}
+coef(elastic_net, s= elastic_net$lambda.min)
+```
+#### The elastic net only taken out the Po2, LF, and Time
+```{r}
+#build model base on elastic net selection variable
+Elasticnet = lm(Crime ~So+M+Ed+Po1+M.F+Pop+NW+U1+U2+Wealth+Ineq+Prob, data = datacrime)
+summary(Elasticnet)
+
+```
+```{r}
+#k fold cross validation
+set.seed(1)
+c <- cv.lm(datacrime,Elasticnet,m=5)
+
+SStot <- sum((datacrime$Crime - mean(datacrime$Crime))^2)
+SSres <- attr(c,"ms")*nrow(datacrime)
+1 - SSres/SStot
+```
+#### Elastic Net selection indicating a model with lower R^2, so here is all the variable that has p value greater than 0.1: So,M,M.F, Pop,NW, U1, Wealth, so that combination became:M + Ed + Po1 + U2 + Ineq + Prob and this is idenitcal combinantion as the Lasso approach. 
+

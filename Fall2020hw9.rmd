@@ -1,0 +1,71 @@
+---
+title: "Fall2020hw9"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 12.1
+
+Describe a situation or problem from your job, everyday life, current events, etc., for which a design of experiments approach would be appropriate.  
+
+My company is launching a new product which provide housing refinance campaign for lenders.In a email campaign context, the subject line title of the email could use A/B Testing experiment approach for seeking a better subject line that will boost the email more likely being open or click-through.
+Let's say we are using a subject A: "Get a quote today for lower rate!" and subject B: " Do you know you could save $2500 a year on your mortgage? Click to find out how." The approach is by sending same content of the email and only difference is the email subject line and then sent to same customer segment of the bank.Let's say bank of Hope have 5000 mortgage customers in the Texas area.We could specifically send 1000 each of the email to the customer and monitor the open rate and click through rate. Then we can implement a hypothesis test to see which one have better lift to make decision to select the better performance on the rest 3000 customers.   
+
+
+## Question 12.2  
+To determine the value of 10 different yes/no features to the market value of a house (large yard, solar roof, etc.), a real estate agent plans to survey 50 potential buyers, showing a fictitious house with different combinations of features.  To reduce the survey size, the agent wants to show just 16 fictitious houses. Use R’s FrF2 function (in the FrF2 package) to find a fractional factorial design for this experiment: what set of features should each of the 16 fictitious houses have?  Note: the output of FrF2 is “1” (include) or  “-1” (don’t include) for each feature.  
+
+
+
+```{r }
+# clear environment
+rm(list = ls())
+#install library
+library('FrF2')
+
+#set seed
+set.seed(1)
+features <- FrF2(nruns = 16, nfactors = 10)
+features
+```
+#### Above is 16 run and 10 factors. For example, for the first one, “1” (include) and  “-1” (don’t include)  which indicating using D,E,F,G,J as features, so to the rest of the rows.  
+
+
+
+
+
+
+## Question 13.1
+
+For each of the following distributions, give an example of data that you would expect to follow this distribution (besides the examples already discussed in class).  
+
+a.	Binomial     
+In the popular video game called League of legends, each team could have two result: Victory and Defeat.Each of the game is independent and Victory meaning success and Defeat meaning failure.
+
+b.	Geometric  
+The TSM is a team that plays of the league of legend game, in this context,  the number of failure before they get a first success follows a Geometric distribution.
+c.	Poisson  
+The number of baby births per hour during a given day.
+
+d.	Exponential   
+The amount of time that Tesla electric car's battery lasts.
+e.	Weibull  
+How long takes a Tesla model 3 breakdown.  
+
+## Question 13.2
+In this problem you, can simulate a simplified airport security system at a busy airport. Passengers arrive according to a Poisson distribution with λ1 = 5 per minute (i.e., mean interarrival rate 1 = 0.2 minutes) to the ID/boarding-pass check queue, where there are several servers who each have exponential service time with mean rate 2 = 0.75 minutes. [Hint: model them as one block that has more than one resource.]  After that, the passengers are assigned to the shortest of the several personal-check queues, where they go through the personal scanner (time is uniformly distributed between 0.5 minutes and 1 minute). 
+
+Use the Arena software (PC users) or Python with SimPy (PC or Mac users) to build a simulation of the system, and then vary the number of ID/boarding-pass checkers and personal-check queues to determine how many are needed to keep average wait times below 15 minutes.  [If you’re using SimPy, or if you have access to a non-student version of Arena, you can use λ1 = 50 to simulate a busier airport.]
+
+Answer:
+I try several way to get pass the limit, I think most of us at the beginning will came accross the similar issue. So what I did is simply increases the resource for ID check to 8, then increase the server number in each Scan resource to 5, so ultimately it works well and fast!
+
+
+

@@ -1,0 +1,232 @@
+---
+title: "Fall2020hw10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 14.1
+The breast cancer data set breast-cancer-wisconsin.data.txt from http://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/  (description at http://archive.ics.uci.edu/ml/datasets/Breast+Cancer+Wisconsin+%28Original%29 ) has missing values.
+1.	Use the mean/mode imputation method to impute values for the missing data.
+2.	Use regression to impute values for the missing data.
+3.	Use regression with perturbation to impute values for the missing data.
+4.	(Optional) Compare the results and quality of classification models (e.g., SVM, KNN) build using 
+(1) the data sets from questions 1,2,3; 
+(2) the data that remains after data points with missing values are removed; and 
+(3) the data set when a binary variable is introduced to indicate missing values.
+
+
+
+```{r }
+# clear environment
+rm(list = ls())
+set.seed(1)
+#import dataset 
+dataset <-  read.table('breast-cancer-wisconsin.data.txt', stringsAsFactors = FALSE, header = F, sep = ',')
+summary(dataset)
+
+```
+
+###  
+
+```{r }
+#Missing Data
+str(dataset)
+# result indicating the dataset$V7 is Char and other is numeric data type so we can further look into the V7
+missing <- which(!grepl('^[0-9]', dataset[,7]))
+missing
+#which(is.na(as.numeric(as.character(dataset[[7]]))))
+```
+```{r}
+#in percentage how much data is missing
+length(missing)
+length(missing)/nrow(dataset)
+```
+#### This is low percentage for missing data, and will less possible for data being bias.-Rule of Thumb: 5% 
+```{r}
+#create a dataset that is remove of these missing values
+ds.clean <- dataset[-missing,]
+ds.missing <- dataset[missing,]
+table(dataset$V11)
+table(ds.clean$V11)
+table(ds.missing$V11)
+```
+```{r}
+#compare in percentage
+sum(dataset$V11==2)/nrow(dataset)
+sum(ds.clean$V11 ==2)/nrow(ds.clean)
+sum(ds.missing$V11==2)/nrow(ds.missing)
+```
+#### Very few data compare to the total, so it is likely to be representitive.
+#### Use the mean/mode imputation
+```{r}
+#create function to get mode 
+getmode <- function(v){
+  uniqv <- unique(v)
+  uniqv[which.max(tabulate(match(v,uniqv)))]
+}
+result <- getmode(dataset[-missing,'V7'])
+result
+
+```
+```{r}
+#Imputation with mode value
+dm <- dataset
+dm[missing,]$V7 <- result
+dm$V7 <- as.integer(dm$V7)
+
+```
+
+```{r}
+#Imputation with mean value
+vmean <- mean(as.integer(dataset[-missing,'V7']))
+as.integer(vmean)
+dmean <- dataset
+dmean[missing,]$V7 <- as.integer(vmean)
+```
+```{r}
+#Imputation with regression using lv
+#Excluding the response column
+de <- dataset[-missing,2:10]
+de$V7 <- as.integer(de$V7)
+mod_Step <-  lm(V7~V2+V3+V4+V5+V6+V8+V9+V10, data = de)
+summary(mod_Step)
+
+```
+#### According to the summary, we can choose predictors based on coorelation, here we are goingto choose the significant ones
+```{r}
+model.new <- lm(V7~V2+V4+V5+V8,data = de)
+summary(model.new)
+```
+#### We are seeing significant predictors and we also will be doing cross validation on the model performance.
+```{r}
+#cross-validation R^2
+library(DAAG)
+set.seed(1)
+c <- cv.lm(de,model.new,m=5)
+
+
+```
+```{r}
+SStot <- sum((as.numeric(dataset[-missing,]$V7) - mean(as.numeric(dataset[-missing,]$V7)))^2)
+SSres <- attr(c,"ms")*nrow(dataset[-missing,])
+1 - SSres/SStot
+
+```
+#### The R^2 value looks good, we can use this model to predict the missing value of V7
+
+```{r}
+newd <- dataset[missing,]
+V7.value <- predict(model.new, newd)
+V7.value
+```
+#### Now we have these predicted value we could insert these value back to V7 replacing the missing value
+
+```{r}
+#Imputation with regression prediction value
+vreg <- round(V7.value)
+dreg <- dataset
+dreg[missing,]$V7 <- vreg
+dreg$V7 <- as.integer(dreg$V7)
+
+```
+
+```{r}
+#we also need to set the cutoff value
+#should be set to 1 if less than 1 or 10 if greater than 10 
+#Note from TA session: "Technically more proper to use the multinomial regression, but assuming that V7 is continuous is fine.")
+dreg$V7[dreg$V7<1] <- 1
+dreg$V7[dreg$V7>10] <- 10
+
+```
+
+####  rnorm: generate a vector of normally distributed random numbers, rnorm is the function to use. n is the number of number want to generate, followed by the standard mean and sd args. In this case, we need 16 which is the number of our missing data.  
+
+```{r}
+#Perturbation imputation with Regression 
+set.seed(1)
+V7_pert <- rnorm(16, vreg, sd(vreg))
+V7_pert
+
+```
+```{r}
+dp <- dataset
+dp[missing,]$V7 <- V7_pert
+dp$V7 <- as.integer(dp$V7)
+
+dp$V7[dp$V7<1] <- 1
+dp$V7[dp$V7>10] <- 10
+
+```
+
+####  We've tried several way of imputation in diffferent method for missing data point, we can run classificiation model to compare the dataset.  
+Recall we have:    
+- ds.clean(missing removed)    
+- dm(mode)  
+- dmean(mean)    
+- dreg(regression)    
+- dp(perturbation)  
+
+I will pick the dp(perturbation) and dm(mode)for comparison. 
+
+```{r}
+#SVM approach
+library(kknn)
+library(Metrics)
+set.seed(1)
+require(caTools)
+train <- sample(rownames(dataset), dim(dataset)[1]*0.7)
+test <- setdiff(rownames(dataset), train)
+```
+
+
+```{r}
+# we will need to try different c value to determine which to use.
+accuracy_list <-c()
+dt <- dp
+for (i in 1:5){
+ model_knn <- kknn(V11~V2+V3+V4+V5+V6+V7+V8+V9+V10, dt[train,], dt[test,],k=i)
+ pred <- round(fitted(model_knn))
+#acc_knn[i] <-  sum(pred == dt[test,]$V11) / nrow(dt[test,])
+ acy <- accuracy(dt[test,]$V11, pred)
+ accuracy_list <- append(accuracy_list, acy)
+}
+
+accuracy_list
+
+```
+#### Above is accuracy of data using regression perturbation imputation, when k = 1 the accuracy slightly higher.
+
+
+```{r}
+#now using dm dataset
+dt <- dm
+
+```
+
+
+```{r}
+accuracy_list <- c()
+ for (i in 1:5){
+ model_knn <- kknn(V11~V2+V3+V4+V5+V6+V7+V8+V9+V10, dt[train,], dt[test,],k=i)
+ pred <- round(fitted(model_knn))
+ acy <- accuracy(dt[test,]$V11, pred)
+ accuracy_list <- append(accuracy_list, acy)
+}
+accuracy_list
+
+```
+####   Summary：  
+Above is accuracy using mode imputation, the accuracy is closed to regression perturbation imputation and also when k = 1 & 2 slightly higer. so in this case, replacing missing data using mode should be good since it is simple than the regression perturbation imputation(also when type the name.) There are many way to deal with missing data, and especially in our case the missing data is around 2% which way lower and maybe the best solution is to remove the missing rows of data. If we want, we can always comeback for explore further on deal with the missing data points. Overall I think this is a good practice to understand the ways process missing data imputation.
+
+## Question 15.1
+
+Describe a situation or problem from your job, everyday life, current events, etc., for which optimization would be appropriate. What data would you need? 
+
+####  A good example would be human resource and accounting department trying to come up with a headcount budget plan for the next year. On the one hand they want to maximized production level by the employees and keep the budget in range. So based on current market average of salary, this will be cost per personnel. Suppose the headcount is 10 and the total budget is 1,000,000, on average the constraints per new added personnel total cost will be limited to 100,000 (conceptually they are equally functionality) Other data they need will be the lowerbound and upperbound of salary range to hired a good employee, and for each new hired they also need to multiply cost per person's yearly or monthly salary/benefit/meidical coverage/401k/office new furniture/ reimbersement etc, adding up all these will be the total cost.
+
+  
+
+
